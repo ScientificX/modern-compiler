@@ -1,0 +1,3 @@
+let
+  var string := "Test string"
+end
