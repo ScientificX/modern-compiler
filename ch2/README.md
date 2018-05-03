@@ -12,4 +12,4 @@ Usage of `Tokenizer.hs` from `ghci`:
     [1 of 2] Compiling Lexer            ( Lexer.hs, interpreted )
     [2 of 2] Compiling Tokenizer        ( Tokenizer.hs, interpreted )
     Ok, two modules loaded.
-    *Tokenizer> tokenizeFile "queens.tig"
+    *Tokenizer> tokenizeFile "../tiger-examples/queens.tig"
