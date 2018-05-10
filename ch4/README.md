@@ -1,4 +1,4 @@
-# Chapter 3
+# Chapter 4
 
 Run the Alex command to generate `Lexer.hs`:
 
