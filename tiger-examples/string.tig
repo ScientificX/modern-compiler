@@ -1,5 +1,5 @@
 let
   var string := "Test string"
 in
-  string
+  print(string)
 end
