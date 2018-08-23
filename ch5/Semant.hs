@@ -88,6 +88,11 @@ instance Show TypeError where
     showError pos $ "Undefined type: " ++ ty
 
 -- The functions that do all the work...
+transProg :: Abs.Exp -> IO ()
+transProg exp =
+  case transExp Env.baseVEnv Env.baseTEnv exp of
+    Left err -> print err
+    Right _ -> print "ok."
 
 actualTy :: Types.Ty -> Abs.Pos -> TypeResult Types.Ty
 actualTy (Types.TName n (Just t)) pos = actualTy t pos
@@ -97,7 +102,6 @@ actualTy (Types.TArray t u) pos = do
   return $ Types.TArray t' u
 actualTy t _ = return $ t
 
--- TODO : check results or use `if` statements instead of silly imperative style usage
 typeCheck :: Types.Ty -> Types.Ty -> Abs.Pos -> TypeResult Bool
 typeCheck a b pos = do
   a' <- actualTy a pos
@@ -114,13 +118,6 @@ typesForExpr :: VEnv -> TEnv -> [Abs.Exp] -> TypeResult [Types.Ty]
 typesForExpr venv tenv exprs = do
   tys <- mapM (transExp venv tenv) exprs
   return $ map ty tys
-
--- TODO : make `transProg` return a value and not `print`
-transProg :: Abs.Exp -> IO ()
-transProg exp =
-  case transExp Env.baseVEnv Env.baseTEnv exp of
-    Left err -> print err
-    Right _ -> print "ok."
 
 transVar :: VEnv -> TEnv -> Abs.Var -> TypeResult ExpTy
 transVar venv tenv expression =
@@ -225,7 +222,7 @@ transExp venv tenv expression =
               Just fE -> do
                 falseExpTy <- trexp fE
                 typeCheck (ty falseExpTy) (ty trueExpTy) pos
-                return $ mkExpTy $ Types.TUnit
+                return $ mkExpTy $ ty trueExpTy
               Nothing -> do
                 typeCheck Types.TUnit (ty trueExpTy) pos
                 return $ mkExpTy $ Types.TUnit
@@ -278,13 +275,14 @@ transFunctionDec venv tenv (Abs.FuncDec name params result body pos) = do
           Just tys ->
             let venvParam = foldr transParam venv (zip paramNames tys) in
               do
-                bodyTy <- transExp venvParam tenv body
                 functionTy <- functionType tenv result pos
-                if (ty bodyTy) == functionTy then
-                  let venvFun = Symbol.enter venv name (Env.FunEntry tys functionTy) in
-                    return $ (venvFun, tenv)
-                else
-                  throwError $ FunctionTypeInvalid functionTy (ty bodyTy) pos
+                let venv' = Symbol.enter venvParam name (Env.FunEntry tys functionTy) in
+                  do
+                    bodyTy <- transExp venv' tenv body
+                    if (ty bodyTy) == functionTy then
+                      return $ (venv', tenv)
+                    else
+                      throwError $ FunctionTypeInvalid functionTy (ty bodyTy) pos
           Nothing ->
             throwError $ UnkownFunctionParamterType pos
     else
@@ -333,13 +331,12 @@ transDec venv tenv (Abs.TypeDec decs) =
 transTy :: TEnv -> Abs.Ty -> TypeResult Types.Ty
 transTy tenv (Abs.NameTy symbol pos) =
   case Symbol.look tenv symbol of
-    -- TODO - use `actualTy` - deal with recursive definition
+    -- TODO deal with recursive definition
     Just ty -> return ty
     Nothing -> throwError $ UndefinedType symbol pos
 transTy tenv (Abs.RecordTy fields) = do
   -- TODO check duplicate fields? -- length paramNames == length (nub paramNames)
   -- TODO recursive record definitions?
-  -- TODO better Abs.Pos ?
   -- TODO add field names to tenv/venv ?
   recordFields <- mapM (transTyField tenv) fields
   let (Abs.Field _ _ _ pos) = (head fields) in
@@ -355,6 +352,5 @@ transTyField tenv (Abs.Field symbol _ ty pos) =
     Just ty -> return $ (symbol, ty)
     Nothing -> throwError $ UndefinedType ty pos
 
--- TODO: make better? /shrug
 generateUnique :: Abs.Pos -> Integer
 generateUnique (Abs.Pos line column) = fromIntegral (line * 1000 + column)
