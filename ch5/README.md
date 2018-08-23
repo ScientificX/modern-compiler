@@ -1,4 +1,4 @@
-# Chapter 3
+# Chapter 5
 
 Run the Alex command to generate `Lexer.hs`:
 
@@ -20,4 +20,6 @@ Usage from `ghci`:
     [7 of 8] Compiling Semant           ( Semant.hs, interpreted )
     [8 of 8] Compiling Main             ( Main.hs, interpreted )
     Ok, 8 modules loaded.
+    *Main> transProgFile "../tiger-examples/testcases/test3.tig"
+    "ok."
     *Main>
