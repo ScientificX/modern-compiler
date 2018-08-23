@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# download testcases from the book and clean up after all the stuffs
+
+wget -r --no-parent -nH https://www.cs.princeton.edu/~appel/modern/testcases/ && \
+  rm robots.txt && \
+  cp ~appel/modern/testcases/*.tig . && \
+  rm -rf ~appel
