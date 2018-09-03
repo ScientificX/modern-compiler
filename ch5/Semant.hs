@@ -326,7 +326,6 @@ transFunctionDec venv tenv (Abs.FuncDec name params result body pos) = do
 
 transTypeDec :: VEnv -> TEnv -> (Abs.Symbol, Abs.Ty, Abs.Pos) -> TypeResult (VEnv, TEnv)
 transTypeDec venv tenv (name, ty, pos) = do
-  -- TODO: recursive definition. insert "header" info into `tenv` and use in `transTy` call
   te <- translateName tenv (name, ty, pos)
   ty' <- transTy te ty
   let tenv' = Symbol.enter te name ty' in
@@ -409,13 +408,10 @@ translateName tenv (name, ty, _) =
 transTy :: TEnv -> Abs.Ty -> TypeResult Types.Ty
 transTy tenv (Abs.NameTy symbol pos) =
   case Symbol.look tenv symbol of
-    -- TODO deal with recursive definition
     Just ty -> return ty
     Nothing -> throwError $ UndefinedType symbol pos
 transTy tenv (Abs.RecordTy fields) = do
   -- TODO check duplicate fields? -- length paramNames == length (nub paramNames)
-  -- TODO recursive record definitions?
-  -- TODO add field names to tenv/venv ?
   recordFields <- mapM (transTyField tenv) fields
   let (Abs.Field _ _ _ pos) = (head fields) in
     return $ Types.TRecord recordFields (generateUnique pos)
