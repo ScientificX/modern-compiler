@@ -170,7 +170,22 @@ ifexpThen t thn e (AlexPn _ l c) = IfExp t thn (Just e) (Pos l c)
 ifexp     t thn (AlexPn _ l c) = IfExp t thn Nothing (Pos l c)
 whileexp  t b (AlexPn _ l c) = WhileExp t b $ Pos l c
 forexp    (_, s) lo hi body (AlexPn _ l c) = ForExp s True lo hi body $ Pos l c
-letexp    decs body (AlexPn _ l c) = LetExp decs body $ Pos l c
+
+letexp decs body (AlexPn _ l c) =
+  let decs' = foldl mergeDecs [] decs in
+    LetExp decs' body $ Pos l c
+  where
+    mergeDecs [] d      = [d]
+    mergeDecs ds d_old  =
+      let
+        d1  = last ds
+        ds' = init ds
+      in
+        case (d1, d_old) of
+          (FunctionDec fs, FunctionDec fs') -> ds' ++ [FunctionDec (fs ++ fs')]
+          (TypeDec ts, TypeDec ts') -> ds' ++ [TypeDec (ts ++ ts')]
+          _ -> ds ++ [d_old]
+
 arrayexp  ((AlexPn _ l c), s) sz exp = ArrayExp s sz exp $ Pos l c
 
 opexp op left right (AlexPn _ l c) = OpExp left op right $ Pos l c

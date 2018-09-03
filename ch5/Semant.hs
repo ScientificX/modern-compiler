@@ -41,6 +41,8 @@ data TypeError = UndefinedVariable Abs.Pos String
                | UnkownFunctionParamterType Abs.Pos
                | FunctionTypeInvalid Types.Ty Types.Ty Abs.Pos
                | UndefinedType String Abs.Pos
+               | FunctionTypeNotFound Abs.Pos
+               | UnknownError String
 
 type TypeResult = Either TypeError
 
@@ -86,6 +88,10 @@ instance Show TypeError where
     showError pos $ "Function declared as " ++ show fnTy ++ " but returned " ++ show resultTy
   show (UndefinedType ty pos) =
     showError pos $ "Undefined type: " ++ ty
+  show (FunctionTypeNotFound pos) =
+    showError pos $ "Function type not found."
+  show (UnknownError s) =
+    "Unknown error happened.\n" ++ s
 
 -- The functions that do all the work...
 transProg :: Abs.Exp -> IO ()
@@ -109,7 +115,10 @@ typeCheck a b pos = do
   if a' == b' then
     return True
   else
-    throwError $ TypeMismatch pos a' b'
+    case (a', b') of
+      (Types.TRecord _ _, Types.TNil) -> return True
+      (Types.TNil, Types.TRecord _ _) -> return True
+      _ -> throwError $ TypeMismatch pos a' b'
 
 compareTypes :: [Types.Ty] -> [Types.Ty] -> Abs.Pos -> TypeResult [Bool]
 compareTypes x y pos = mapM (\(a, b) -> typeCheck a b pos) $ zip x y
@@ -257,10 +266,25 @@ transExp venv tenv expression =
     -- (Abs.ForExp name assignExp limitExp bodyExp pos) =
       -- TODO
 
-
     _ -> return $ mkExpTy Types.TUnit
   where
     trexp e = transExp venv tenv e
+
+typeHeader :: VEnv -> TEnv -> Abs.Dec -> TypeResult (VEnv, TEnv)
+typeHeader venv tenv (Abs.TypeDec [(n, t, p)]) =
+  return $ (venv, Symbol.enter tenv n (Types.TName n Nothing))
+typeHeader venv tenv (Abs.FunctionDec [(Abs.FuncDec n fields t body pos)]) =
+  let fieldTypes = mapM (\t -> Symbol.look tenv t) (map (\(Abs.Field _ _ t _) -> t) fields) in
+    case fieldTypes of
+      Just ft ->
+        case t of
+          Just functionType ->
+            case Symbol.look tenv functionType of
+              Just functionTy -> return $ (Symbol.enter venv n (Env.FunEntry ft functionTy), tenv)
+              Nothing -> throwError $ FunctionTypeNotFound pos
+          Nothing -> throwError $ FunctionTypeNotFound pos
+      Nothing -> throwError $ UnkownFunctionParamterType pos
+typeHeader venv tenv _ = return $ (venv, tenv)
 
 -- TODO : recurive function definition
 transFunctionDec :: VEnv -> TEnv -> Abs.FuncDec -> TypeResult (VEnv, TEnv)
@@ -303,8 +327,9 @@ transFunctionDec venv tenv (Abs.FuncDec name params result body pos) = do
 transTypeDec :: VEnv -> TEnv -> (Abs.Symbol, Abs.Ty, Abs.Pos) -> TypeResult (VEnv, TEnv)
 transTypeDec venv tenv (name, ty, pos) = do
   -- TODO: recursive definition. insert "header" info into `tenv` and use in `transTy` call
-  ty' <- transTy tenv ty
-  let tenv' = Symbol.enter tenv name ty' in
+  te <- translateName tenv (name, ty, pos)
+  ty' <- transTy te ty
+  let tenv' = Symbol.enter te name ty' in
     return $ (venv, tenv')
 
 transDec :: VEnv -> TEnv -> Abs.Dec -> TypeResult (VEnv, TEnv)
@@ -326,7 +351,60 @@ transDec venv tenv (Abs.VarDec name _ typ exp pos) = do
             typeCheck t et pos
             return $ (Symbol.enter venv name (Env.VarEntry et), tenv)
 transDec venv tenv (Abs.TypeDec decs) =
-  foldM (\(v, t) -> transTypeDec v t) (venv, tenv) decs
+  let
+    tenv' = foldr (\(n, _, _) te -> Symbol.enter te n (Types.TName n Nothing)) tenv decs
+    -- tenv'' = foldM (\t d -> translateName t d) tenv' decs
+  in
+    do
+      -- te <- tenv''
+      -- te' <- foldM (\t d -> translateNameWithTyName t d) te decs
+      foldM (\(v, t) -> transTypeDec v t) (venv, tenv') decs
+
+translateName :: TEnv -> (Abs.Symbol, Abs.Ty, Abs.Pos) -> TypeResult TEnv
+translateName tenv (name, ty, _) =
+  case Symbol.look tenv name of
+    Just (Types.TName n _) -> do
+      t <- transTy tenv ty
+      return $ Symbol.enter tenv n (Types.TName n (Just t))
+    _ -> return $ tenv
+
+-- translateNameWithTyName :: TEnv -> (Abs.Symbol, Abs.Ty, Abs.Pos) -> TypeResult TEnv
+-- translateNameWithTyName tenv (name, ty, _) =
+--   case Symbol.look tenv name of
+--     Just (Types.TName n _) -> do
+--       t <- transTyName tenv ty
+--       return $ Symbol.enter tenv n (Types.TName n (Just t))
+--     _ -> return $ tenv
+
+-- transTyName :: TEnv -> Abs.Ty -> TypeResult Types.Ty
+-- transTyName tenv (Abs.NameTy symbol pos) =
+--   case Symbol.look tenv symbol of
+--     Just t ->
+--       case t of
+--         Types.TName s _ ->
+--           case Symbol.look tenv s of
+--             Just (Types.TName s' (Just (Types.TName s'' _))) -> do
+--               fT <- followTy tenv [symbol] s''
+--               return $ Types.TName s' (Just fT)
+--             Just ty -> return $ ty
+--             _ -> throwError $ UnknownError "transTyName gone bad"
+--         _ -> return $ t
+--     _ -> throwError $ UnknownError "transTyName can't find"
+-- transTyName tenv t = transTy tenv t
+
+-- followTy :: TEnv -> [Abs.Symbol] -> Abs.Symbol -> TypeResult Types.Ty
+-- followTy tenv seen sym =
+--   if all (/= sym) seen then
+--     case Symbol.look tenv sym of
+--       Just ty ->
+--         case ty of
+--           Types.TName s (Just (Types.TName s' _)) -> do
+--             t <- followTy tenv (s:seen) s'
+--             return $ Types.TName s (Just t)
+--           _ -> return $ ty
+--       _ -> throwError $ UnknownError "followTy whoops"
+--   else
+--     throwError $ UnknownError "followTy gone wrong"
 
 transTy :: TEnv -> Abs.Ty -> TypeResult Types.Ty
 transTy tenv (Abs.NameTy symbol pos) =

@@ -6,3 +6,4 @@ Lots of guidance from:
 
 - [https://github.com/unnohideyuki/Tiger-in-Haskell](https://github.com/unnohideyuki/Tiger-in-Haskell)
 - [https://github.com/crunchbang/Higer](https://github.com/crunchbang/Higer)
+- [https://github.com/sunchao/tiger](https://github.com/sunchao/tiger)
