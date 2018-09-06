@@ -116,13 +116,18 @@ exp         : nil                                          { NilExp }
             | break                                        { breakexp $1 }
             | let decs in seqExp end                       { letexp $2 (SeqExp $4) $1 }
 
-seqExp      : exp                                          { [ $1 ] }
-            | seqExp ';' exp                               { $3 : $1 }
+
+seqExp      : exp ';' seqExp                               { $1 : $3 }
+            | exp                                          { [ $1 ] }
             | {- empty -}                                  { [] }
 
-argList     : exp                                          { [ $1 ] }
-            | argList ',' exp                              { $3 : $1 }
-            | {- empty -}                                  { [] }
+
+argList     : exp argListTail           { $1 : $2 }
+            | {- empty -}               { [] }
+
+argListTail : ',' exp argListTail       { $2 : $3 }
+            | {- empty -}               { [] }
+
 
 infixExp    : exp '*' exp                                  { opexp TimesOp $1 $3 $2  }
             | exp '/' exp                                  { opexp DivideOp $1 $3 $2 }
@@ -170,8 +175,25 @@ ifexpThen t thn e (AlexPn _ l c) = IfExp t thn (Just e) (Pos l c)
 ifexp     t thn (AlexPn _ l c) = IfExp t thn Nothing (Pos l c)
 whileexp  t b (AlexPn _ l c) = WhileExp t b $ Pos l c
 forexp    (_, s) lo hi body (AlexPn _ l c) = ForExp s True lo hi body $ Pos l c
-letexp    decs body (AlexPn _ l c) = LetExp decs body $ Pos l c
+
+letexp decs body (AlexPn _ l c) =
+  let decs' = foldl mergeDecs [] decs in
+    LetExp decs' body $ Pos l c
+  where
+    mergeDecs [] d      = [d]
+    mergeDecs ds d_old  =
+      let
+        d1  = last ds
+        ds' = init ds
+      in
+        case (d1, d_old) of
+          (FunctionDec fs, FunctionDec fs') -> ds' ++ [FunctionDec (fs ++ fs')]
+          (TypeDec ts, TypeDec ts') -> ds' ++ [TypeDec (ts ++ ts')]
+          _ -> ds ++ [d_old]
+
 arrayexp  ((AlexPn _ l c), s) sz exp = ArrayExp s sz exp $ Pos l c
+
+seqexpConcat exp (SeqExp es) = SeqExp (exp : es)
 
 opexp op left right (AlexPn _ l c) = OpExp left op right $ Pos l c
 
