@@ -116,13 +116,18 @@ exp         : nil                                          { NilExp }
             | break                                        { breakexp $1 }
             | let decs in seqExp end                       { letexp $2 (SeqExp $4) $1 }
 
-seqExp      : exp                                          { [ $1 ] }
-            | seqExp ';' exp                               { $3 : $1 }
+
+seqExp      : exp ';' seqExp                               { $1 : $3 }
+            | exp                                          { [ $1 ] }
             | {- empty -}                                  { [] }
 
-argList     : exp                                          { [ $1 ] }
-            | argList ',' exp                              { $3 : $1 }
-            | {- empty -}                                  { [] }
+
+argList     : exp argListTail           { $1 : $2 }
+            | {- empty -}               { [] }
+
+argListTail : ',' exp argListTail       { $2 : $3 }
+            | {- empty -}               { [] }
+
 
 infixExp    : exp '*' exp                                  { opexp TimesOp $1 $3 $2  }
             | exp '/' exp                                  { opexp DivideOp $1 $3 $2 }
@@ -161,7 +166,7 @@ field   ((AlexPn _ l c), f) (_, t) = Field f True t $ Pos l c
 
 intexp    (_, i) = IntExp i
 stringexp ((AlexPn _ l c), s) = StringExp s $ Pos l c
-callexp   ((AlexPn _ l c), f) args = CallExp f (reverse args) $ Pos l c
+callexp   ((AlexPn _ l c), f) args = CallExp f args $ Pos l c
 breakexp  (AlexPn _ l c) = BreakExp $ Pos l c
 recfield  ((AlexPn _ l c), s) exp = (s, exp, Pos l c)
 recordexp ((AlexPn _ l c), s) rs = RecordExp rs s $ Pos l c
@@ -187,6 +192,8 @@ letexp decs body (AlexPn _ l c) =
           _ -> ds ++ [d_old]
 
 arrayexp  ((AlexPn _ l c), s) sz exp = ArrayExp s sz exp $ Pos l c
+
+seqexpConcat exp (SeqExp es) = SeqExp (exp : es)
 
 opexp op left right (AlexPn _ l c) = OpExp left op right $ Pos l c
 
