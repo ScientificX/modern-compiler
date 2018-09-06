@@ -38,7 +38,7 @@ data TypeError = UndefinedVariable Abs.Pos String
                | SubscriptVarRequiresArray Abs.Pos Types.Ty
                | InvalidNil Abs.Pos
                | DuplicateFunctionParameters Abs.Pos
-               | UnkownFunctionParamterType Abs.Pos
+               | UnknownFunctionParamterType Abs.Pos
                | FunctionTypeInvalid Types.Ty Types.Ty Abs.Pos
                | UndefinedType String Abs.Pos
                | FunctionTypeNotFound Abs.Pos
@@ -71,7 +71,7 @@ instance Show TypeError where
   show (TypeMismatch pos expected given) =
     showError pos $ "Type mismatch. \nExpected: " ++ show expected ++ "\nGiven: " ++ show given
   show (UnknownArrayType pos t) =
-    showError pos $ "Unkown type for Array: " ++ show t
+    showError pos $ "Unknown type for Array: " ++ show t
   show (FieldVarRequiresRecord pos t) =
     showError pos $ "FieldVar requires Record type.\nGiven: " ++ show t
   show (FieldNotFound pos n) =
@@ -82,8 +82,8 @@ instance Show TypeError where
     showError pos $ "Unexpected Nil"
   show (DuplicateFunctionParameters pos) =
     showError pos $ "Duplicate parameters in function definition"
-  show (UnkownFunctionParamterType pos) =
-    showError pos $ "Unkown function parameter type"
+  show (UnknownFunctionParamterType pos) =
+    showError pos $ "Unknown function parameter type"
   show (FunctionTypeInvalid fnTy resultTy pos) =
     showError pos $ "Function declared as " ++ show fnTy ++ " but returned " ++ show resultTy
   show (UndefinedType ty pos) =
@@ -270,45 +270,36 @@ transExp venv tenv expression =
   where
     trexp e = transExp venv tenv e
 
-typeHeader :: VEnv -> TEnv -> Abs.Dec -> TypeResult (VEnv, TEnv)
-typeHeader venv tenv (Abs.TypeDec [(n, t, p)]) =
-  return $ (venv, Symbol.enter tenv n (Types.TName n Nothing))
-typeHeader venv tenv (Abs.FunctionDec [(Abs.FuncDec n fields t body pos)]) =
-  let fieldTypes = mapM (\t -> Symbol.look tenv t) (map (\(Abs.Field _ _ t _) -> t) fields) in
-    case fieldTypes of
-      Just ft ->
-        case t of
-          Just functionType ->
-            case Symbol.look tenv functionType of
-              Just functionTy -> return $ (Symbol.enter venv n (Env.FunEntry ft functionTy), tenv)
-              Nothing -> throwError $ FunctionTypeNotFound pos
-          Nothing -> throwError $ FunctionTypeNotFound pos
-      Nothing -> throwError $ UnkownFunctionParamterType pos
-typeHeader venv tenv _ = return $ (venv, tenv)
+
+fieldNames :: [Abs.Field] -> [Symbol.Symbol]
+fieldNames = map (\(Abs.Field n _ _ _) -> n)
+
+fieldTypes :: TEnv -> [Abs.Field] -> TypeResult [Types.Ty]
+fieldTypes tenv fields = mapM (fty tenv) fields
+  where
+    fty :: TEnv -> Abs.Field -> TypeResult Types.Ty
+    fty tenv (Abs.Field _ _ t p) =
+      case Symbol.look tenv t of
+        Just t -> return t
+        Nothing -> throwError $ UndefinedType t p
 
 -- TODO : recurive function definition
 transFunctionDec :: VEnv -> TEnv -> Abs.FuncDec -> TypeResult (VEnv, TEnv)
 transFunctionDec venv tenv (Abs.FuncDec name params result body pos) = do
-  let paramNames = map (\(Abs.Field n _ _ _) -> n) params in
+  let paramNames = fieldNames params in
     if length paramNames == length (nub paramNames) then
-      let
-        paramTypeNames = map (\(Abs.Field _ _ t _) -> t) params
-        paramTypes = mapM (\t -> Symbol.look tenv t) paramTypeNames
-      in
-        case paramTypes of
-          Just tys ->
-            let venvParam = foldr transParam venv (zip paramNames tys) in
+      do
+        tys <- fieldTypes tenv params
+        let venvParam = foldr transParam venv (zip paramNames tys) in
+          do
+            functionTy <- functionType tenv result pos
+            let venv' = Symbol.enter venvParam name (Env.FunEntry tys functionTy) in
               do
-                functionTy <- functionType tenv result pos
-                let venv' = Symbol.enter venvParam name (Env.FunEntry tys functionTy) in
-                  do
-                    bodyTy <- transExp venv' tenv body
-                    if (ty bodyTy) == functionTy then
-                      return $ (venv', tenv)
-                    else
-                      throwError $ FunctionTypeInvalid functionTy (ty bodyTy) pos
-          Nothing ->
-            throwError $ UnkownFunctionParamterType pos
+                bodyTy <- transExp venv' tenv body
+                if (ty bodyTy) == functionTy then
+                  return $ (venv', tenv)
+                else
+                  throwError $ FunctionTypeInvalid functionTy (ty bodyTy) pos
     else
       throwError $ DuplicateFunctionParameters pos
   where
@@ -331,9 +322,26 @@ transTypeDec venv tenv (name, ty, pos) = do
   let tenv' = Symbol.enter te name ty' in
     return $ (venv, tenv')
 
+functionReturnType :: TEnv -> Abs.FuncDec -> TypeResult Types.Ty
+functionReturnType tenv (Abs.FuncDec _ _ result _ pos) =
+  case result of
+    Just r ->
+      case Symbol.look tenv r of
+        Just ty -> return ty
+        Nothing -> throwError $ UndefinedType r pos
+    Nothing -> return Types.TUnit
+
+functionHeader :: VEnv -> TEnv -> Abs.FuncDec -> TypeResult (VEnv, TEnv)
+functionHeader venv tenv f@(Abs.FuncDec name fields _ _ _) = do
+  returnType <- functionReturnType tenv f
+  fieldTypes <- fieldTypes tenv fields
+  let venv' = Symbol.enter venv name $ (Env.FunEntry fieldTypes returnType) in
+    return $ (venv', tenv)
+
 transDec :: VEnv -> TEnv -> Abs.Dec -> TypeResult (VEnv, TEnv)
-transDec venv tenv (Abs.FunctionDec fundecs) =
-  foldlM (\(v, t) -> transFunctionDec v t) (venv, tenv) fundecs
+transDec venv tenv (Abs.FunctionDec fundecs) = do
+  (venv', tenv') <- foldM (\(v, t) -> functionHeader v t) (venv, tenv) fundecs
+  foldlM (\(v, t) -> transFunctionDec v t) (venv', tenv') fundecs
 transDec venv tenv (Abs.VarDec name _ typ exp pos) = do
   expTy <- transExp venv tenv exp
   let et = ty expTy in
@@ -350,6 +358,7 @@ transDec venv tenv (Abs.VarDec name _ typ exp pos) = do
             typeCheck t et pos
             return $ (Symbol.enter venv name (Env.VarEntry et), tenv)
 transDec venv tenv (Abs.TypeDec decs) =
+  -- TODO : check duplicate type definitions
   let
     tenv' = foldr (\(n, _, _) te -> Symbol.enter te n (Types.TName n Nothing)) tenv decs
     -- tenv'' = foldM (\t d -> translateName t d) tenv' decs

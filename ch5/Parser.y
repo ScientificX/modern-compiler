@@ -161,7 +161,7 @@ field   ((AlexPn _ l c), f) (_, t) = Field f True t $ Pos l c
 
 intexp    (_, i) = IntExp i
 stringexp ((AlexPn _ l c), s) = StringExp s $ Pos l c
-callexp   ((AlexPn _ l c), f) args = CallExp f args $ Pos l c
+callexp   ((AlexPn _ l c), f) args = CallExp f (reverse args) $ Pos l c
 breakexp  (AlexPn _ l c) = BreakExp $ Pos l c
 recfield  ((AlexPn _ l c), s) exp = (s, exp, Pos l c)
 recordexp ((AlexPn _ l c), s) rs = RecordExp rs s $ Pos l c
