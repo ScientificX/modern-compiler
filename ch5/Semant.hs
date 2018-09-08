@@ -263,10 +263,19 @@ transExp venv tenv expression =
             _ -> throwError $ UnknownArrayType pos t'
         Nothing -> throwError $ TypeNotFound pos arrayTy
 
-    -- (Abs.ForExp name assignExp limitExp bodyExp pos) =
-      -- TODO
-
-    _ -> return $ mkExpTy Types.TUnit
+    (Abs.ForExp name _ assignExp limitExp bodyExp pos) ->
+      -- translate to `let`/`while`
+      let
+        ivar = Abs.SimpleVar name pos
+        limitvar = Abs.SimpleVar "limit" pos
+        decs = [ (Abs.VarDec name False Nothing assignExp pos)
+               , (Abs.VarDec "limit" False Nothing limitExp pos) ]
+        loopTest = Abs.OpExp (Abs.VarExp ivar) Abs.LeOp (Abs.VarExp limitvar) pos
+        loopIncrement = Abs.OpExp (Abs.VarExp ivar) Abs.PlusOp (Abs.IntExp 1) pos
+        seqExp = Abs.SeqExp [ bodyExp , (Abs.AssignExp ivar loopIncrement pos) ]
+        loop = Abs.WhileExp loopTest seqExp pos
+      in
+        trexp $ Abs.LetExp decs loop pos
   where
     trexp e = transExp venv tenv e
 
