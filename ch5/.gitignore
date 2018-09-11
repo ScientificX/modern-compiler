@@ -1,3 +1,6 @@
 Lexer.hs
 Parser.hs
 Parser.info
+*.hi
+*.o
+Main

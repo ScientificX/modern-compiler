@@ -23,3 +23,33 @@ Usage from `ghci`:
     *Main> transProgFile "../tiger-examples/testcases/test3.tig"
     "ok."
     *Main>
+
+To use from CLI, compile Main.hs:
+
+    ghc Main.hs
+
+Then run against file(s):
+
+    ./Main ../tiger-examples/testcases/test7.tig ../tiger-examples/testcases/test8.tig
+    "ok."
+    "ok."
+
+There is a runner helper `./runner` which will run all the test cases and also show which ones should trigger an error:
+
+    $ ./runner
+
+    ../tiger-examples/testcases/merge.tig :
+    Type mismatch.
+    Expected: TInt
+    Given: TString
+    Line: 11 | Column: 20
+
+
+    ../tiger-examples/testcases/queens.tig :
+    "ok."
+
+
+    ../tiger-examples/testcases/test1.tig :
+    "ok."
+
+    ... etc ....

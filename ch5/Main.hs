@@ -3,6 +3,7 @@ module Main where
 import Parser (parse)
 import Lexer (alexScanTokens)
 import Semant (transProg)
+import System.Environment (getArgs)
 
 tokenizeFile :: String -> IO ()
 tokenizeFile file = do
@@ -22,4 +23,5 @@ transProgFile file = do
 
 main :: IO ()
 main = do
-  print "nothing."
+  args <- getArgs
+  mapM_ transProgFile args

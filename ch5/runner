@@ -1,0 +1,10 @@
+#!/bin/bash
+
+for f in ../tiger-examples/testcases/*.tig ;do
+  echo
+  echo -n $f ": "
+  echo
+  grep error $f
+  ./Main $f
+  echo
+done
