@@ -5,13 +5,6 @@
 "ok."
 
 
-../tiger-examples/testcases/test43.tig :
-Type mismatch.
-Expected: TInt
-Given: TUnit
-Line: 6 | Column: 11
-
-
 ../tiger-examples/testcases/test46.tig :
 Type mismatch.
 Expected: TInt
