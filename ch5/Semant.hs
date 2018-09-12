@@ -306,7 +306,7 @@ transFunctionDec venv tenv (Abs.FuncDec name params result body pos) = do
               do
                 bodyTy <- transExp venv' tenv body
                 if (ty bodyTy) == functionTy then
-                  return $ (venv', tenv)
+                  return $ ((Symbol.enter venv name (Env.FunEntry tys functionTy)), tenv)
                 else
                   throwError $ FunctionTypeInvalid functionTy (ty bodyTy) pos
     else
@@ -370,12 +370,8 @@ transDec venv tenv (Abs.TypeDec decs) =
   -- TODO : check duplicate type definitions
   let
     tenv' = foldr (\(n, _, _) te -> Symbol.enter te n (Types.TName n Nothing)) tenv decs
-    -- tenv'' = foldM (\t d -> translateName t d) tenv' decs
   in
-    do
-      -- te <- tenv''
-      -- te' <- foldM (\t d -> translateNameWithTyName t d) te decs
-      foldM (\(v, t) -> transTypeDec v t) (venv, tenv') decs
+    foldM (\(v, t) -> transTypeDec v t) (venv, tenv') decs
 
 translateName :: TEnv -> (Abs.Symbol, Abs.Ty, Abs.Pos) -> TypeResult TEnv
 translateName tenv (name, ty, _) =
@@ -384,44 +380,6 @@ translateName tenv (name, ty, _) =
       t <- transTy tenv ty
       return $ Symbol.enter tenv n (Types.TName n (Just t))
     _ -> return $ tenv
-
--- translateNameWithTyName :: TEnv -> (Abs.Symbol, Abs.Ty, Abs.Pos) -> TypeResult TEnv
--- translateNameWithTyName tenv (name, ty, _) =
---   case Symbol.look tenv name of
---     Just (Types.TName n _) -> do
---       t <- transTyName tenv ty
---       return $ Symbol.enter tenv n (Types.TName n (Just t))
---     _ -> return $ tenv
-
--- transTyName :: TEnv -> Abs.Ty -> TypeResult Types.Ty
--- transTyName tenv (Abs.NameTy symbol pos) =
---   case Symbol.look tenv symbol of
---     Just t ->
---       case t of
---         Types.TName s _ ->
---           case Symbol.look tenv s of
---             Just (Types.TName s' (Just (Types.TName s'' _))) -> do
---               fT <- followTy tenv [symbol] s''
---               return $ Types.TName s' (Just fT)
---             Just ty -> return $ ty
---             _ -> throwError $ UnknownError "transTyName gone bad"
---         _ -> return $ t
---     _ -> throwError $ UnknownError "transTyName can't find"
--- transTyName tenv t = transTy tenv t
-
--- followTy :: TEnv -> [Abs.Symbol] -> Abs.Symbol -> TypeResult Types.Ty
--- followTy tenv seen sym =
---   if all (/= sym) seen then
---     case Symbol.look tenv sym of
---       Just ty ->
---         case ty of
---           Types.TName s (Just (Types.TName s' _)) -> do
---             t <- followTy tenv (s:seen) s'
---             return $ Types.TName s (Just t)
---           _ -> return $ ty
---       _ -> throwError $ UnknownError "followTy whoops"
---   else
---     throwError $ UnknownError "followTy gone wrong"
 
 transTy :: TEnv -> Abs.Ty -> TypeResult Types.Ty
 transTy tenv (Abs.NameTy symbol pos) =
