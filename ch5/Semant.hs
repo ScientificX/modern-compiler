@@ -43,6 +43,7 @@ data TypeError = UndefinedVariable Abs.Pos String
                | UndefinedType String Abs.Pos
                | FunctionTypeNotFound Abs.Pos
                | UnknownError String
+               | InvalidOp Types.Ty Types.Ty OpType Abs.Pos
 
 type TypeResult = Either TypeError
 
@@ -92,6 +93,8 @@ instance Show TypeError where
     showError pos $ "Function type not found."
   show (UnknownError s) =
     "Unknown error happened.\n" ++ s
+  show (InvalidOp l r o pos) =
+    showError pos $ "Invalid Op expression. \nLeft: " ++ show l ++ "\nRight: " ++ show r ++ "\nOpType: " ++ show o
 
 -- The functions that do all the work...
 transProg :: Abs.Exp -> IO ()
@@ -162,6 +165,24 @@ transVar venv tenv expression =
               _ -> throwError $ TypeMismatch pos Types.TInt e'
         _ -> throwError $ SubscriptVarRequiresArray pos v
 
+data OpType = Arith | Comp | Eq deriving (Show)
+
+
+opType :: Abs.Oper -> OpType
+opType o =
+  case o of
+    Abs.PlusOp -> Arith
+    Abs.MinusOp -> Arith
+    Abs.TimesOp -> Arith
+    Abs.DivideOp -> Arith
+    Abs.EqOp -> Eq
+    Abs.NeqOp -> Eq
+    Abs.LtOp -> Comp
+    Abs.LeOp -> Comp
+    Abs.GtOp -> Comp
+    Abs.GeOp -> Comp
+
+
 transExp :: VEnv -> TEnv -> Abs.Exp -> TypeResult ExpTy
 transExp venv tenv expression =
   case expression of
@@ -191,9 +212,38 @@ transExp venv tenv expression =
     (Abs.OpExp l op r pos) -> do
       left <- trexp l
       right <- trexp r
-      typeCheck Types.TInt (ty left) pos
-      typeCheck Types.TInt (ty right) pos
-      return $ mkExpTy Types.TInt
+      case opType op of
+        Arith -> do
+          typeCheck Types.TInt (ty left) pos
+          typeCheck Types.TInt (ty right) pos
+          return $ mkExpTy Types.TInt
+        Comp ->
+          case (ty left) of
+            Types.TInt -> do
+              typeCheck (ty left) (ty right) pos
+              return $ mkExpTy Types.TInt
+            Types.TString -> do
+              typeCheck (ty left) (ty right) pos
+              return $ mkExpTy Types.TInt
+            _ -> throwError $ InvalidOp (ty left) (ty right) (opType op) pos
+        Eq ->
+          case (ty left) of
+            Types.TInt -> do
+              typeCheck (ty left) (ty right) pos
+              return $ mkExpTy Types.TInt
+            Types.TString -> do
+              typeCheck (ty left) (ty right) pos
+              return $ mkExpTy Types.TInt
+            Types.TArray _ _ -> do
+              typeCheck (ty left) (ty right) pos
+              return $ mkExpTy Types.TInt
+            Types.TRecord _ _ -> do
+              typeCheck (ty left) (ty right) pos
+              return $ mkExpTy Types.TInt
+            Types.TNil -> do
+              typeCheck (ty left) (ty right) pos
+              return $ mkExpTy Types.TInt
+            _ -> throwError $ InvalidOp (ty left) (ty right) (opType op) pos
 
     (Abs.RecordExp recordFields recordType pos) ->
       case Symbol.look tenv recordType of
