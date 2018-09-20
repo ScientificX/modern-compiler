@@ -6,7 +6,7 @@ import Control.Monad
 import Data.Foldable
 import Data.List (nub)
 
-import Debug.Trace (trace)
+-- import Debug.Trace (trace)
 
 import qualified Symbol
 import qualified Abs
@@ -121,6 +121,8 @@ typeCheck a b pos = do
     case (a', b') of
       (Types.TRecord _ _, Types.TNil) -> return True
       (Types.TNil, Types.TRecord _ _) -> return True
+      (Types.TRecord _ x, Types.TRecord _ y) ->
+        if x == y then return True else throwError $ TypeMismatch pos a' b'
       _ -> throwError $ TypeMismatch pos a' b'
 
 compareTypes :: [Types.Ty] -> [Types.Ty] -> Abs.Pos -> TypeResult [Bool]
@@ -181,7 +183,6 @@ opType o =
     Abs.LeOp -> Comp
     Abs.GtOp -> Comp
     Abs.GeOp -> Comp
-
 
 transExp :: VEnv -> TEnv -> Abs.Exp -> TypeResult ExpTy
 transExp venv tenv expression =
@@ -342,7 +343,6 @@ fieldTypes tenv fields = mapM (fty tenv) fields
         Just t -> return t
         Nothing -> throwError $ UndefinedType t p
 
--- TODO : recurive function definition
 transFunctionDec :: VEnv -> TEnv -> Abs.FuncDec -> TypeResult (VEnv, TEnv)
 transFunctionDec venv tenv (Abs.FuncDec name params result body pos) = do
   let paramNames = fieldNames params in
@@ -378,8 +378,11 @@ transTypeDec :: VEnv -> TEnv -> (Abs.Symbol, Abs.Ty, Abs.Pos) -> TypeResult (VEn
 transTypeDec venv tenv (name, ty, pos) = do
   te <- translateName tenv (name, ty, pos)
   ty' <- transTy te ty
-  let tenv' = Symbol.enter te name ty' in
-    return $ (venv, tenv')
+  case ty' of
+    Types.TName _ Nothing -> throwError $ TypeNotFound pos (show ty)
+    _ ->
+      let tenv' = Symbol.enter te name ty' in
+        return $ (venv, tenv')
 
 functionReturnType :: TEnv -> Abs.FuncDec -> TypeResult Types.Ty
 functionReturnType tenv (Abs.FuncDec _ _ result _ pos) =
