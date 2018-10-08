@@ -1,0 +1,7 @@
+Lexer.hs
+Parser.hs
+Parser.info
+*.hi
+*.o
+Main
+.DS_Store
