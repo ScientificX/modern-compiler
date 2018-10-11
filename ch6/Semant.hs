@@ -6,7 +6,7 @@ import Control.Monad
 import Data.Foldable
 import Data.List (nub)
 
-import Debug.Trace (trace)
+-- import Debug.Trace (trace)
 
 import qualified Symbol
 import qualified Abs
@@ -239,7 +239,7 @@ transExp venv tenv level temp expression =
     (Abs.LetExp decs exp pos) -> do
       -- TODO level fold
       (venv', tenv', level', temp') <- foldlM (\(ve, te, l, t) -> transDec ve te l t) (venv, tenv, level, temp) decs
-      (expTy, level'', temp'') <- trace (show venv') $ transExp venv' tenv' level' temp' exp
+      (expTy, level'', temp'') <- transExp venv' tenv' level' temp' exp
       return $ ((mkExpTy (ty expTy)), level'', temp'')
 
     (Abs.ArrayExp arrayTy size initExp pos) ->
