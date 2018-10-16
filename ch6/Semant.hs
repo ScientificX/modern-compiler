@@ -22,10 +22,10 @@ type TypeResult = Either TypeError
 type VEnv = Symbol.Table Env.EnvEntry
 type TEnv = Symbol.Table Types.Ty
 
-data ExpTy = ExpTy { ty :: Types.Ty } deriving (Show)
+data ExpTy = ExpTy { _ty :: Types.Ty } deriving (Show)
 
 mkExpTy :: Types.Ty -> ExpTy
-mkExpTy t = ExpTy { ty = t }
+mkExpTy t = ExpTy { _ty = t }
 
 -- The functions that do all the work...
 transProg :: Abs.Exp -> IO ()
@@ -70,7 +70,7 @@ compareTypes x y pos = mapM (\(a, b) -> typeCheck a b pos) $ zip x y
 typesForExpr :: VEnv -> TEnv -> Translate.Level -> Temp.Temp -> [Abs.Exp] -> TypeResult [Types.Ty]
 typesForExpr venv tenv level temp exprs = do
   tys <- mapM (transExp venv tenv level temp) exprs
-  return $ map (ty . expFst) tys
+  return $ map (_ty . expFst) tys
   where
     expFst (a, _, _) = a
 
@@ -86,7 +86,7 @@ transVar venv tenv level temp expression =
 
     (Abs.FieldVar var name pos) -> do
       (var', level', temp') <- transVar venv tenv level temp var
-      let v = ty var' in
+      let v = _ty var' in
         case v of
           (Types.TRecord fields _) ->
             case lookup name fields of
@@ -98,11 +98,11 @@ transVar venv tenv level temp expression =
 
     (Abs.SubscriptVar var exp pos) -> do
       (var', level', temp') <- transVar venv tenv level temp var
-      v <- actualTy (ty var') pos
+      v <- actualTy (_ty var') pos
       case v of
         Types.TArray t _ -> do
           (e, level'', temp'') <- transExp venv tenv level' temp' exp
-          let e' = ty e in
+          let e' = _ty e in
             case e' of
               Types.TInt -> return $ ((mkExpTy t), level'', temp'')
               _ -> throwError $ TypeMismatch pos Types.TInt e'
@@ -155,36 +155,36 @@ transExp venv tenv level temp expression =
       (right, level'', temp'') <- trexp level' temp' r
       case opType op of
         Arith -> do
-          typeCheck Types.TInt (ty left) pos
-          typeCheck Types.TInt (ty right) pos
+          typeCheck Types.TInt (_ty left) pos
+          typeCheck Types.TInt (_ty right) pos
           return $ ((mkExpTy Types.TInt), level'', temp'')
         Comp ->
-          case (ty left) of
+          case (_ty left) of
             Types.TInt -> do
-              typeCheck (ty left) (ty right) pos
+              typeCheck (_ty left) (_ty right) pos
               return $ ((mkExpTy Types.TInt), level'', temp'')
             Types.TString -> do
-              typeCheck (ty left) (ty right) pos
+              typeCheck (_ty left) (_ty right) pos
               return $ ((mkExpTy Types.TInt), level'', temp'')
-            _ -> throwError $ InvalidOp (ty left) (ty right) (show (opType op)) pos
+            _ -> throwError $ InvalidOp (_ty left) (_ty right) (show (opType op)) pos
         Eq ->
-          case (ty left) of
+          case (_ty left) of
             Types.TInt -> do
-              typeCheck (ty left) (ty right) pos
+              typeCheck (_ty left) (_ty right) pos
               return $ ((mkExpTy Types.TInt), level'', temp'')
             Types.TString -> do
-              typeCheck (ty left) (ty right) pos
+              typeCheck (_ty left) (_ty right) pos
               return $ ((mkExpTy Types.TInt), level'', temp'')
             Types.TArray _ _ -> do
-              typeCheck (ty left) (ty right) pos
+              typeCheck (_ty left) (_ty right) pos
               return $ ((mkExpTy Types.TInt), level'', temp'')
             Types.TRecord _ _ -> do
-              typeCheck (ty left) (ty right) pos
+              typeCheck (_ty left) (_ty right) pos
               return $ ((mkExpTy Types.TInt), level'', temp'')
             Types.TNil -> do
-              typeCheck (ty left) (ty right) pos
+              typeCheck (_ty left) (_ty right) pos
               return $ ((mkExpTy Types.TInt), level'', temp'')
-            _ -> throwError $ InvalidOp (ty left) (ty right) (show (opType op)) pos
+            _ -> throwError $ InvalidOp (_ty left) (_ty right) (show (opType op)) pos
 
     (Abs.RecordExp recordFields recordType pos) ->
       case Symbol.look tenv recordType of
@@ -210,37 +210,37 @@ transExp venv tenv level temp expression =
     (Abs.AssignExp var exp pos) -> do
       (e, level', temp') <- trexp level temp exp
       (v, level'', temp'') <- transVar venv tenv level' temp' var
-      typeCheck (ty e) (ty v) pos
+      typeCheck (_ty e) (_ty v) pos
       return $ ((mkExpTy Types.TUnit), level'', temp'')
 
     (Abs.IfExp testE trueE falseE pos) -> do
       (testExpTy, level', temp') <- trexp level temp testE
-      let testTy = ty testExpTy in
+      let testTy = _ty testExpTy in
         case testTy of
           Types.TInt -> do
             (trueExpTy, level'', temp'') <- trexp level' temp' trueE
             case falseE of
               Just fE -> do
                 (falseExpTy, l, t) <- trexp level'' temp'' fE
-                typeCheck (ty falseExpTy) (ty trueExpTy) pos
-                return $ ((mkExpTy $ ty trueExpTy), l, t)
+                typeCheck (_ty falseExpTy) (_ty trueExpTy) pos
+                return $ ((mkExpTy $ _ty trueExpTy), l, t)
               Nothing -> do
-                typeCheck Types.TUnit (ty trueExpTy) pos
+                typeCheck Types.TUnit (_ty trueExpTy) pos
                 return $ ((mkExpTy $ Types.TUnit), level'', temp'')
           _ -> throwError $ IfExpectsTruth pos testTy
 
     (Abs.WhileExp testExp bodyExp pos) -> do
       (testExpTy, level', temp') <- trexp level temp testExp
       (bodyExpTy, level'', temp'') <- trexp level' temp' bodyExp
-      typeCheck Types.TInt (ty testExpTy) pos
-      typeCheck Types.TUnit (ty bodyExpTy) pos
+      typeCheck Types.TInt (_ty testExpTy) pos
+      typeCheck Types.TUnit (_ty bodyExpTy) pos
       return $ ((mkExpTy $ Types.TUnit), level'', temp'')
 
     (Abs.LetExp decs exp pos) -> do
       -- TODO level fold
       (venv', tenv', level', temp') <- foldlM (\(ve, te, l, t) -> transDec ve te l t) (venv, tenv, level, temp) decs
       (expTy, level'', temp'') <- transExp venv' tenv' level' temp' exp
-      return $ ((mkExpTy (ty expTy)), level'', temp'')
+      return $ ((mkExpTy (_ty expTy)), level'', temp'')
 
     (Abs.ArrayExp arrayTy size initExp pos) ->
       case Symbol.look tenv arrayTy of
@@ -250,8 +250,8 @@ transExp venv tenv level temp expression =
             (Types.TArray arrayTy u) -> do
               (sizeExpTy, level', temp') <- trexp level temp size
               (initExpTy, level'', temp'') <- trexp level' temp' initExp
-              typeCheck Types.TInt (ty sizeExpTy) pos
-              typeCheck arrayTy (ty initExpTy) pos
+              typeCheck Types.TInt (_ty sizeExpTy) pos
+              typeCheck arrayTy (_ty initExpTy) pos
               return $ ((mkExpTy t'), level'', temp'')
             _ -> throwError $ UnknownArrayType pos t'
         Nothing -> throwError $ TypeNotFound pos arrayTy
@@ -302,10 +302,10 @@ transFunctionDec venv tenv level temp (Abs.FuncDec name params result body pos) 
               let venv' = Symbol.enter venvParam name (Env.FunEntry tys functionTy level'' label) in
                 do
                   (bodyTy, _, _) <- transExp venv' tenv level'' newTemp body
-                  if (ty bodyTy) == functionTy then
+                  if (_ty bodyTy) == functionTy then
                     return $ ((Symbol.enter venv name (Env.FunEntry tys functionTy level'' label)), tenv, level'', newTemp)
                   else
-                    throwError $ FunctionTypeInvalid functionTy (ty bodyTy) pos
+                    throwError $ FunctionTypeInvalid functionTy (_ty bodyTy) pos
     else
       throwError $ DuplicateFunctionParameters pos
   where
@@ -360,7 +360,7 @@ transDec venv tenv level temp (Abs.FunctionDec fundecs) = do
   foldlM (\(ve, te, l, t) -> transFunctionDec ve te l t) (venv', tenv', level, temp) fundecs
 transDec venv tenv level temp (Abs.VarDec name escape typ exp pos) = do
   (expTy, level', temp') <- transExp venv tenv level temp exp
-  let et = ty expTy in
+  let et = _ty expTy in
     let (access, level'', temp'') = Translate.allocLevel level' escape temp' in
       case typ of
         Nothing ->
