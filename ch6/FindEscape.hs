@@ -161,7 +161,6 @@ traverseExp eenv d expr@(Abs.ArrayExp _ sizeExp initExp _) =
   in
     ((envMerge seenv ieenv), expr)
 traverseExp eenv d expr@(Abs.ForExp v _ assignExp limitExp bodyExp _) =
-  -- TODO : check the `v` usage
   let
     (aeenv, _) = traverseExp eenv d assignExp
     (leenv, _) = traverseExp eenv d limitExp
